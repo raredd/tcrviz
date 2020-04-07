@@ -1,0 +1,21 @@
+Package: tcrviz
+Type: Package
+Title: tcr tracking
+Version: 0.0.1
+Authors@R: person("Robert", "Redd", email = "raredd01@gmail.com",
+  role = c("aut", "cre"))
+Author: Robert Redd
+Maintainer: Robert Redd <raredd01@gmail.com>
+Description: TCR tracking visualizations.
+Imports:
+    graphics,
+    grDevices
+Suggests:
+    htmlTable,
+    knitr
+License: GPL-2
+LazyData: yes
+URL: https://github.com/raredd/tcrviz
+VignetteBuilder: knitr
+RoxygenNote: 7.1.0
+Encoding: UTF-8

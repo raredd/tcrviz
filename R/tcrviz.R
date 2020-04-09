@@ -399,26 +399,19 @@ tcrviz <- function(data, inter = TRUE, n.group = rep_len(1L, ncol(data)),
     }
     
     ## add break in y-axis if some sequences are not being shown in ylim
-    # if (!ylim_type %in% 'all' && is.null(ylim)) {
-    #   if (ii == 1L) {
-    #     xx <- par('usr')[1L] + diff(par('usr')[1:2]) / c(-25, 25)
-    #     yy <- max(na) + diff(par('usr')[3:4]) / 25 * c(-1, 1)
-    #     sl <- diff(yy) / diff(xx)
-    #     
-    #     rect(xx[1L], yy[1L], xx[2L], yy[2L],
-    #          col = par('bg'), xpd = NA, border = NA)
-    #     seg(xx[1L], yy[1L], xx[2L], yy[2L], col = par('fg'))
-    #     seg(xx[1L], yy[1L], xx[2L], yy[2L], col = par('fg'))
-    #     
-    #     # co <- c(-xx, max(na) + yy, xx, max(na) - yy)
-    #     # sl <- (co[4L] - co[2L]) / (co[3L] - co[1L])
-    #     # 
-    #     # rect(co[1L], co[2L] - sl, co[2L], co[4L] - sl,
-    #     #      border = NA, col = 'white', xpd = NA)
-    #     # seg(co[1L], co[2L], co[3L], co[4L], col = 1L)
-    #     # seg(co[1L], co[2L] - 0.5, co[3L], co[4L] - 0.5, col = 1L)
-    #   }
-    # }
+    if (!ylim_type %in% 'all' && is.null(ylim)) {
+      if (ii == 1L) {
+        xx <- par('usr')[1L] + diff(par('usr')[1:2]) / c(-50, 50)
+        df <- diff(par('usr')[3:4]) / 50
+        yy <- max(na) + df * c(-0.5, 0.5)
+        yf <- df / 2 - 0.25
+
+        rect(xx[1L], yy[1L], xx[2L], yy[2L],
+             col = 'white', xpd = NA, border = NA)
+        seg(xx[1L], yy[1L] - yf, xx[2L], yy[1L] + yf, lwd = 0.25)
+        seg(xx[1L], yy[2L] - yf, xx[2L], yy[2L] + yf, lwd = 0.25)
+      }
+    }
     
     ## this is a pain -- aesthetic lines for samples and groups
     xx <- c(0.15, 0.85)

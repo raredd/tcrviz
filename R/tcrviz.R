@@ -1,5 +1,5 @@
-### main
-# tcrviz, diversity
+### main tcrviz fns
+# tcrviz, tcrdata, diversity
 ###
 
 
@@ -9,6 +9,8 @@
 #'
 #' @param data an \code{n x t} count matrix with \code{n} unique sequences
 #' for \code{t} time points
+#' @param inter logical; use intermediate tracking for sequences; otherwise,
+#' tracking only shown between columns with > 0 counts
 #' @param n.group,group grouping of time points: n per group and group label
 #' @param col.group,col.gmain colors for each group and main group color
 #' @param labels individual time point labels
@@ -36,6 +38,9 @@
 #' \code{ylim} is given
 #' @param col.undetected color of undetected sequences (used in pie charts)
 #' @param cex.main size of main labels
+#' @param asterisk logical; if \code{TRUE}, new sequences are marked with
+#' \code{*} at the originating time point
+#' @param ids,col.ids sequences to track and highlight with \code{col.ids}
 #' @param heights,widths see \code{\link{layout}}
 #' @param space number of lines between top of bars from rest of plot
 #' @param file output file name to write table; if none, no table is written
@@ -64,29 +69,42 @@
 #'   .Dimnames = list(1:50, letters[1:5])
 #' )
 #' 
-#' tcrviz(dat)
+#' ## intermediate tracking of undetected sequences (default)
+#' tcrviz(dat, inter = TRUE)
+#' ## no tracking undetected sequences, ie, lines only between >0 counts
+#' tcrviz(dat, inter = FALSE)
+#' 
+#' 
+#' ## highlight individual sequences
+#' ids <- rownames(dat)[rowSums(!!dat) == 2]
+#' tcrviz(dat, ids = ids, col.ids = 'purple', track_type = 'none')
+#' tcrviz(dat, ids = ids, col.ids = 'purple',
+#'        col.group = adjustcolor(palette(), 0.25))
+#' 
+#' 
+#' ## highlighting time points
 #' tcrviz(dat, highlight = 0) ## same as above
 #' tcrviz(dat, highlight = 2) ## only second column is fully opaque
 #' 
 #' \dontrun{
 #' ## all opaque then highlight each
-#' op <- par(ask = TRUE)
+#' par(ask = TRUE)
 #' tcrviz(dat, highlight = 0:ncol(dat))
-#' par(op)
-#' }
+#' par(ask = FALSE)
 #' 
 #' tcrviz(
 #'   dat, n.group = c(1, 2, 2), inner_pie = TRUE, n_min = 1,
-#'   group = c('first', 'second', 'third'),
+#'   group = c('first', 'second', 'third'), track_type = 'det',
 #'   # denom = list(1:5, 2:5, 2:5, 2:5, 2:5), ## cols 2-5 independent of 1
 #'   col.group = c('grey', 'tomato', 'orange'),
 #'   ## use different xlim for each panel
 #'   xlim = lapply(1:5, function(x) c(0, max(dat[, x])))
 #' )
+#' }
 #'
 #' @export
 
-tcrviz <- function(data, n.group = rep_len(1L, ncol(data)),
+tcrviz <- function(data, inter = TRUE, n.group = rep_len(1L, ncol(data)),
                    group = rep_len('', length(n.group)),
                    col.group = seq_along(group), col.gmain = col.group,
                    labels = rep_len('', length(group)),
@@ -97,28 +115,36 @@ tcrviz <- function(data, n.group = rep_len(1L, ncol(data)),
                    which = NULL, xlim = NULL, ylim = NULL,
                    ylim_type = c('all', 'detected', 'post'),
                    col.undetected = 'grey90', cex.main = 2,
+                   asterisk = FALSE, ids = NULL, col.ids = 'coral3',
                    heights = NULL, widths = NULL, space = 5,
                    file = '', top = Inf, highlight = NULL, reset_par = TRUE,
                    indices = c('shannon', 'simpson', 'invsimpson', 'none')) {
   odata <- data
-  force(denom); force(n.group)
+  force(n.group); force(denom)
+  if (isTRUE(inter))
+    data[] <- t(apply(data, 1L, int))
+  
   data <- list(
     track = data,
-    first = max.col(+!!data, ties.method = 'first')
+    first = max.col(+!!odata, ties.method = 'first'),
+    last  = max.col(+!!odata, ties.method = 'last')
   )
-  
-  if (is.numeric(col.group))
-    col.group <- palette()[as.integer(col.group)]
   
   ## if highlighting, loop over desired figures and exit (no table)
   if (!is.null(highlight)) {
+    if (is.numeric(col.group))
+      col.group <- palette()[as.integer(col.group)]
+    col.group <- rep_len(col.group, ncol(odata))
+    
     palette(col.group)
     for (color in highlight) {
+      if (color > ncol(odata))
+        palette(tcol(palette(), 0.25))
       Recall(
-        odata, n.group, group, col.group, col.gmain, labels, show_bar, show_pie,
-        show_text, denom, show_counts, n_min, inner_pie, track_type,
-        color, xlim, ylim, ylim_type, col.undetected, cex.main, heights, widths,
-        space, file, top, NULL, TRUE, indices
+        odata, inter, n.group, group, col.group, col.gmain, labels, show_bar,
+        show_pie, show_text, denom, show_counts, n_min, inner_pie, track_type,
+        color, xlim, ylim, ylim_type, col.undetected, cex.main, asterisk, ids,
+        col.ids, heights, widths, space, file, top, NULL, TRUE, indices
       )
     }
     palette('default')
@@ -155,12 +181,13 @@ tcrviz <- function(data, n.group = rep_len(1L, ncol(data)),
   names(denom) <- colnames(track)
   
   ## vectors of group labels, group id, colors for looping
-  force(col.gmain)
   groups <- rep(seq_along(group), n.group)
   group  <- rep(group, n.group)
   
   ## if one color given for each group, apply alpha
   col.group <- if (length(col.group) == length(n.group)) {
+    if (is.numeric(col.group))
+      col.group <- palette()[as.integer(col.group)]
     sapply(seq_along(n.group), function(ii) {
       if (n.group[ii] == 1L)
         col.group[ii]
@@ -172,7 +199,7 @@ tcrviz <- function(data, n.group = rep_len(1L, ncol(data)),
   } else rep_len(col.group, nc)
   
   col.group <- unlist(col.group)
-  col.gmain <- tcol(rep(col.gmain, n.group), 1)
+  col.gmain <- rm_alpha(col.group)
   
   
   ## initiate res for table output
@@ -185,10 +212,11 @@ tcrviz <- function(data, n.group = rep_len(1L, ncol(data)),
     ## use all unique sequences to set ylim
     all = NULL,
     ## use only max detected over all time points to set ylim
-    detected = c(min(colSums(!rtrack)), nrow(track)) + c(-5, 1),
+    detected = pmax(1, c(min(colSums(!rtrack)), nrow(track)) + c(-5, 1)),
     ## dont include first column of track to get ylim (includes break)
-    post = c(min(colSums(!rtrack[, -1L])), nrow(track)) + c(-1, 1)
+    post = pmax(1, c(min(colSums(!rtrack[, -1L])), nrow(track)) + c(-1, 1))
   )
+  
   
   ## change palette for ease of coloring
   palette(col.group)
@@ -253,7 +281,7 @@ tcrviz <- function(data, n.group = rep_len(1L, ncol(data)),
       ## if none/not detected, use palette()[nc + 1] -- col.undetected
       tbl <- replace(tbl, tbl < 1, max(nc) + 1L)
       col <- c(palette()[sin], col.undetected)
-      tbl <- table(factor(col[tbl], col))
+      tbl <- table(factor(col[tbl], unique(col)))
       
       ## exclude not detected
       tbl2 <- tbl[-length(tbl)]
@@ -331,9 +359,11 @@ tcrviz <- function(data, n.group = rep_len(1L, ncol(data)),
     ##   bars colored by time point each sequence first appears
     ##   connected by tracking lines with same color
     par(mar = c(3, 0.25, space, 0.25))
+    col <- replace(first[oo_this], na, NA)
+    col[names(this[oo_this]) %in% ids] <- col.ids
+    
     bp <- barplot(
-      this[oo_this], col = replace(first[oo_this], na, NA),
-      space = 0, border = 'white',
+      this[oo_this], col = col, space = 0, border = 'white',
       xlim = xlim[[ii]] %||% xl[[ii]] * c(1, 1.15), ylim = ylim %||% yl,
       axes = FALSE, horiz = TRUE, names.arg = FALSE
     )
@@ -347,10 +377,12 @@ tcrviz <- function(data, n.group = rep_len(1L, ncol(data)),
       axis(2L, at, sprintf('< %s', n_min), las = 1L)
       # abline(h = at, lty = 'dashed')
     }
-    if (ii > 1L) {
+    if (asterisk && ii > 1L) {
       rn <- diff(par('usr')[1:2]) / 50
-      points(this[oo_this] + rn, bp, pch = '*', cex = 1, xpd = NA,
-             col = replace(first[oo_this], first[oo_this] != ii, NA))
+      col <- replace(first[oo_this], first[oo_this] != ii, NA)
+      col[names(this[oo_this]) %in% ids & !is.na(col)] <- col.ids
+      
+      points(this[oo_this] + rn, bp, pch = '*', xpd = NA, col = col)
       legend('bottomright', legend = '* new', bty = 'n', cex = 1.5, text.col = ii)
     }
     
@@ -362,53 +394,61 @@ tcrviz <- function(data, n.group = rep_len(1L, ncol(data)),
     # box(bty = 'l', lwd = 0.5)
     abline(v = 0, lwd = 0.5)
     
-    # axis(2L, bp, names(this[oo_this]), cex.axis = 0.2, lwd = 0, las = 1L)
+    seg <- function(...) {
+      segments(..., xpd = NA, lend = 3L)
+    }
     
     ## add break in y-axis if some sequences are not being shown in ylim
-    if (!ylim_type %in% 'all' && is.null(ylim)) {
-      if (ii == 1L) {
-        co <- c(-1, max(na) - 0.5 - 0.5, 1, max(na) - 0.5)
-        sl <- (co[4L] - co[2L]) / (co[3L] - co[1L])
-        seg <- function(...)
-          segments(..., xpd = NA, col = 1L, lend = 3L)
-        
-        rect(co[1L], co[2L] - sl, co[2L], co[4L] - sl,
-             border = NA, col = 'white', xpd = NA)
-        seg(co[1L], co[2L], co[3L], co[4L])
-        seg(co[1L], co[2L] - 0.5, co[3L], co[4L] - 0.5)
-      }
-    }
+    # if (!ylim_type %in% 'all' && is.null(ylim)) {
+    #   if (ii == 1L) {
+    #     xx <- par('usr')[1L] + diff(par('usr')[1:2]) / c(-25, 25)
+    #     yy <- max(na) + diff(par('usr')[3:4]) / 25 * c(-1, 1)
+    #     sl <- diff(yy) / diff(xx)
+    #     
+    #     rect(xx[1L], yy[1L], xx[2L], yy[2L],
+    #          col = par('bg'), xpd = NA, border = NA)
+    #     seg(xx[1L], yy[1L], xx[2L], yy[2L], col = par('fg'))
+    #     seg(xx[1L], yy[1L], xx[2L], yy[2L], col = par('fg'))
+    #     
+    #     # co <- c(-xx, max(na) + yy, xx, max(na) - yy)
+    #     # sl <- (co[4L] - co[2L]) / (co[3L] - co[1L])
+    #     # 
+    #     # rect(co[1L], co[2L] - sl, co[2L], co[4L] - sl,
+    #     #      border = NA, col = 'white', xpd = NA)
+    #     # seg(co[1L], co[2L], co[3L], co[4L], col = 1L)
+    #     # seg(co[1L], co[2L] - 0.5, co[3L], co[4L] - 0.5, col = 1L)
+    #   }
+    # }
     
     ## this is a pain -- aesthetic lines for samples and groups
     xx <- c(0.15, 0.85)
     yy <- grconvertY(0.975, 'nfc')
     
-    seg <- function(...)
-      segments(..., xpd = NA, lend = 3L, lwd = 10)
-    
     ## first in group adds each group label; otherwise, just line
     if (fig_1 | ii == 1L) {
-      # if (0) {
       fr <- grconvertX(xx[1L], 'nfc')
-      to <- grconvertX(if (ii == 1L & (sum(groups[ii] == groups) != 2L) |
-                           (length(groups) == 2L & ii == 2L))
-        xx[2L] else 1, 'nfc')
-      seg(fr, yy, to, yy, col = col.group[ii])
+      # to <- grconvertX(if (ii == 1L & (sum(groups[ii] == groups) != 2L) |
+      #                      (length(groups) == 2L & ii == 2L))
+      #   xx[2L] else 1, 'nfc')
+      to <- grconvertX(xx[2L], 'nfc')
+      seg(fr, yy, to, yy, col = ii, lwd = 10)
       text(fr, grconvertY(0.95, 'nfc'), group[ii], col = col.gmain[ii],
            adj = 0, xpd = NA, cex = 2.5, font = 2L)
     } else if (oig(ii, groups, 'last') & ii > 1L) {
       fr <- grconvertX(0, 'nfc')
       to <- grconvertX(xx[2L], 'nfc')
-      seg(fr, yy, to, yy, col = col.group[ii])
+      seg(fr, yy, to, yy, col = ii, lwd = 10)
     } else {
       fr <- grconvertX(0, 'nfc')
       to <- grconvertX(1, 'nfc')
-      seg(fr, yy, to, yy, col = col.group[ii])
+      fr <- grconvertX(xx[1L], 'nfc')
+      to <- grconvertX(xx[2L], 'nfc')
+      seg(fr, yy, to, yy, col = ii, lwd = 10)
     }
     
     ## main label for each time point
-    mtext(colnames(track)[ii], col = ii, cex = cex.main, font = 2L,
-          at = grconvertX(0.5, 'nfc'), adj = 0.5)
+    mtext(colnames(track)[ii], col = ii, cex = cex.main,
+          font = 2L, at = grconvertX(0.5, 'nfc'), adj = 0.5)
     
     ## tracking lines for persisting sequences
     if (!is.null(that)) {
@@ -423,7 +463,7 @@ tcrviz <- function(data, n.group = rep_len(1L, ncol(data)),
       )
       
       ## extra padding at top of bar, end of arrow
-      pad <- rep_len(diff(par('usr')[1:2]) / 75, 2L)
+      pad <- rep_len(diff(par('usr')[1:2]) / 50, 2L) * c(asterisk + 1L, 1L)
       
       ## scale lwd/alpha by number of total links (not used)
       nla <- rescaler(n_links, c(0.25, 1))
@@ -434,35 +474,53 @@ tcrviz <- function(data, n.group = rep_len(1L, ncol(data)),
         round(this)[oo_this] < 1 | round(that)[oo_that][to] < 1
       else FALSE
       
-      if (!track_type %in% 'none')
+      if (!track_type %in% 'none') {
+        col <- ifelse(persist[oo_this], first[oo_this], NA)
+        col[names(this[oo_this]) %in% ids] <- col.ids
+        
         arrows(
           this[oo_this] + pad[1L], c(bp), par('usr')[2L] + pad[2L], c(bp)[to],
-          # col = tcol(ifelse(persist[oo_this], first[oo_this], 0), nla[oo_this]),
-          # lwd = ifelse(undet, 0.5, nll[oo_this]),
-          col = ifelse(persist[oo_this], first[oo_this], 0),
-          lwd = ifelse(undet, 0.5, 1), lty = ifelse(undet, 4L, 1L),
+          col = col, lwd = ifelse(undet, 0.5, 1), lty = ifelse(undet, 4L, 1L),
           xpd = NA, code = 2L, length = 0.025
         )
+      } else {
+        col <- rep_len(col.ids[1L], length(oo_this))
+        col[(!(names(this[oo_this]) %in% ids)) |
+              (data$last[oo_this] <= ii) |
+              data$first[oo_this] > ii] <- NA
+        
+        arrows(
+          this[oo_this] + pad[2L], c(bp), par('usr')[2L] + pad[2L], c(bp)[to],
+          col = col, xpd = NA, code = 2L, length = 0.025
+        )
+      }
     }
     
     ## create matrix of data for each time point:
     ## sequence, number, persist to next time (y/n), originating time point
     tbl <- cbind(
-      Sequence = names(this), N = round(this), Persist = c('No', 'Yes')[persist + 1L],
-      Origin = colnames(track)[first], Origin_idx = first
+      Sequence = names(this),
+      N = round(this),
+      Persist = c('No', 'Yes')[persist + 1L],
+      Origin = colnames(track)[first],
+      Origin_idx = first
     )[rev(oo_this), ]
     
     if (ii == nc)
       tbl[, 'Persist'] <- '<font color=black>N/A</font>'
     tbl <- tbl[tbl[, 'N'] > 0, ]
     tbl <- tbl[seq.int(if (is.finite(top)) top else nrow(tbl)), ]
+    
     tbl[, 'Origin'] <- sprintf(
       '<font color=%s>%s</font>',
-      rm_alpha(tcol(palette()))[as.integer(tbl[, 'Origin_idx'])], tbl[, 'Origin']
+      rm_alpha(tcol(palette()))[as.integer(tbl[, 'Origin_idx'])],
+      tbl[, 'Origin']
     )
+    
     tbl[, 'Persist'] <- sprintf(
       '<font color=%s>%s</font>',
-      c('black', 'green')[(tbl[, 'Persist'] %in% 'Yes') + 1L], tbl[, 'Persist']
+      c('black', 'green')[(tbl[, 'Persist'] %in% 'Yes') + 1L],
+      tbl[, 'Persist']
     )
     
     rownames(tbl) <- NULL
@@ -474,6 +532,7 @@ tcrviz <- function(data, n.group = rep_len(1L, ncol(data)),
         !(identical('none', indices) | identical(indices, FALSE))) {
       counts <- as.integer(tbl[, 'N'])
       div <- diversity(counts, setdiff(indices, c('none')))
+      
       tbl <- cbindx(
         tbl,
         Frequency = round(counts / sum(counts), 3L),
@@ -494,14 +553,84 @@ tcrviz <- function(data, n.group = rep_len(1L, ncol(data)),
       cgroup = sprintf('<font color=%s>%s</font>',
                        rm_alpha(tcol(palette()[sin])), colnames(track)),
       n.cgroup = rep_len(ncol(tbl), nc),
-      caption = 'Time point summary: Sequence, N at current time, Persisting
-                 to next time point, time point of origin.'
+      caption = sprintf(
+        'Summary of tcrviz: Sequence, count at current time, persisting to
+        next time point, time point of origin%s.', if (add_diversity)
+          'diversity indices' else ''
+      )
     )
     
     write_htmlTable(ht, file = file)
   }
   
   invisible(res)
+}
+
+#' tcr data
+#' 
+#' Convenience function to format data for \code{tcrviz}.
+#' 
+#' @param data a data frame
+#' @param seq,cnt column names or indices of \code{data} of sequences  and
+#' counts, respectively
+#' @param labels optional time point labels
+#' 
+#' @return
+#' A matrix in the proper format for \code{\link{tcrviz}}.
+#' 
+#' @examples
+#' ## alternative data format
+#' dat <- tcrviz:::cbindx(
+#'   time1 = letters[1:12], n1 = 1:12,
+#'   space = NA,
+#'   time2 = letters[2:10], n2 = 2:10,
+#'   space = NA,
+#'   time3 = letters[1:10], n3 = 1:10,
+#'   space = NA,
+#'   time4 = letters[6:15], n4 = 6:15
+#' )
+#' dat <- data.frame(dat)
+#' dat[] <- lapply(dat, type.convert)
+#' 
+#' ## data in tcrviz format
+#' tcrdata(dat)
+#' tcrdata(dat, labels = paste0('week', 1:4))
+#' 
+#' @export
+
+tcrdata <- function(data, seq = NULL, cnt = NULL, labels = NULL) {
+  data <- data[, colSums(is.na(data)) < nrow(data)]
+  
+  cn <- colnames(data)
+  cl <- sapply(data, class)
+  
+  seq <- data[, if (is.null(seq))
+    cl %in% c('character', 'factor') else seq, drop = FALSE]
+  cnt <- data[, if (is.null(cnt))
+    cl %in% c('integer', 'numeric') else cnt, drop = FALSE]
+  
+  f <- function(x, y) {
+    x <- x[!is.na(x)]
+    y <- y[!is.na(y)]
+    rep(x, y)
+  }
+  
+  ll <- Map(f, seq, cnt)
+  ss <- levels(as.factor(unlist(ll)))
+  dd <- data.frame(
+    sequence = unlist(ll),
+    timepoint = rep(names(ll), lengths(ll)),
+    stringsAsFactors = FALSE
+  )
+  dd <- within(dd, {
+    timepoint <- factor(timepoint, names(ll))
+    sequence <- factor(sequence, ss)
+  })
+  
+  res <- as.matrix(unclass(table(dd$sequence, dd$timepoint)))
+  colnames(res) <- labels %||% colnames(seq)
+  
+  res
 }
 
 #' Diversity

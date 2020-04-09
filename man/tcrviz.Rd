@@ -6,6 +6,7 @@
 \usage{
 tcrviz(
   data,
+  inter = TRUE,
   n.group = rep_len(1L, ncol(data)),
   group = rep_len("", length(n.group)),
   col.group = seq_along(group),
@@ -25,6 +26,9 @@ tcrviz(
   ylim_type = c("all", "detected", "post"),
   col.undetected = "grey90",
   cex.main = 2,
+  asterisk = FALSE,
+  ids = NULL,
+  col.ids = "coral3",
   heights = NULL,
   widths = NULL,
   space = 5,
@@ -38,6 +42,9 @@ tcrviz(
 \arguments{
 \item{data}{an \code{n x t} count matrix with \code{n} unique sequences
 for \code{t} time points}
+
+\item{inter}{logical; use intermediate tracking for sequences; otherwise,
+tracking only shown between columns with > 0 counts}
 
 \item{n.group, group}{grouping of time points: n per group and group label}
 
@@ -80,6 +87,11 @@ detected after post) -- \code{all > detected > post}; ignored if
 
 \item{cex.main}{size of main labels}
 
+\item{asterisk}{logical; if \code{TRUE}, new sequences are marked with
+\code{*} at the originating time point}
+
+\item{ids, col.ids}{sequences to track and highlight with \code{col.ids}}
+
 \item{heights, widths}{see \code{\link{layout}}}
 
 \item{space}{number of lines between top of bars from rest of plot}
@@ -114,25 +126,38 @@ dat <- structure(
   .Dimnames = list(1:50, letters[1:5])
 )
 
-tcrviz(dat)
+## intermediate tracking of undetected sequences (default)
+tcrviz(dat, inter = TRUE)
+## no tracking undetected sequences, ie, lines only between >0 counts
+tcrviz(dat, inter = FALSE)
+
+
+## highlight individual sequences
+ids <- rownames(dat)[rowSums(!!dat) == 2]
+tcrviz(dat, ids = ids, col.ids = 'purple', track_type = 'none')
+tcrviz(dat, ids = ids, col.ids = 'purple',
+       col.group = adjustcolor(palette(), 0.25))
+
+
+## highlighting time points
 tcrviz(dat, highlight = 0) ## same as above
 tcrviz(dat, highlight = 2) ## only second column is fully opaque
 
 \dontrun{
 ## all opaque then highlight each
-op <- par(ask = TRUE)
+par(ask = TRUE)
 tcrviz(dat, highlight = 0:ncol(dat))
-par(op)
-}
+par(ask = FALSE)
 
 tcrviz(
   dat, n.group = c(1, 2, 2), inner_pie = TRUE, n_min = 1,
-  group = c('first', 'second', 'third'),
+  group = c('first', 'second', 'third'), track_type = 'det',
   # denom = list(1:5, 2:5, 2:5, 2:5, 2:5), ## cols 2-5 independent of 1
   col.group = c('grey', 'tomato', 'orange'),
   ## use different xlim for each panel
   xlim = lapply(1:5, function(x) c(0, max(dat[, x])))
 )
+}
 
 }
 \seealso{
